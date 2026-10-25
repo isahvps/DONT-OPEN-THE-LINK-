@@ -1,0 +1,1392 @@
+
+const $ = id => document.getElementById(id);
+
+const state = {
+  chapter: 0,
+  trust: 0,
+  curiosity: 0,
+  suspicion: 0,
+  clues: [],
+  decisions: [],
+  obeyed: 0,
+  opened: false,
+  seenCorridor: false,
+  linkRefused: false,
+  ending: false,
+  playerName: '',
+  filesOpened: 0,
+  secretSignal: false
+};
+
+let busy = false;
+let audioContext = null;
+let chatCount = 0;
+let scareCount = 0;
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function stamp() {
+  return new Date().toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function say(who, text, type = '') {
+  const p = document.createElement('p');
+  p.className = 'line ' + type;
+
+  const time = document.createElement('span');
+  time.className = 'stamp';
+  time.textContent = stamp() + ' ';
+
+  const name = document.createElement('b');
+  name.className = 'who';
+  name.textContent = who + ': ';
+
+  p.append(time, name, document.createTextNode(text));
+  $('chat').append(p);
+  $('chat').scrollTop = $('chat').scrollHeight;
+  chatCount++;
+
+  return p;
+}
+
+function system(text) {
+  say('SISTEMA', text, 'system');
+}
+
+async function stranger(text, delay = 850, glitch = false) {
+  $('typing').classList.remove('hidden');
+
+  await sleep(delay);
+
+  $('typing').classList.add('hidden');
+  say('unknown_404', text, glitch ? 'glitch' : '');
+}
+
+async function player(text) {
+  say(state.playerName || 'Você', text, 'player');
+  await sleep(180);
+}
+
+function setPresence(text, offline = false) {
+  $('presence').textContent = text;
+  $('connection').textContent = offline ? 'DESCONECTADO' : 'CONECTADO';
+  $('connection').classList.toggle('offline', offline);
+}
+
+function options(items) {
+  const area = document.createElement('div');
+  area.className = 'chat-choices';
+
+  items.forEach(item => {
+    const button = document.createElement('button');
+    button.className = 'choice';
+    button.textContent = item.text;
+
+    button.addEventListener('click', async () => {
+      if (busy || state.ending) return;
+
+      busy = true;
+
+      area.querySelectorAll('button').forEach(b => {
+        b.disabled = true;
+      });
+
+      state.decisions.push(item.key || item.text);
+
+      await player(item.text);
+      area.remove();
+
+      try {
+        await item.action();
+      } catch (error) {
+        console.error(error);
+        system('Uma falha interrompeu a sequência. Tente recarregar a página.');
+      }
+
+      busy = false;
+    });
+
+    area.append(button);
+  });
+
+  $('chat').append(area);
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+
+function gameScene({
+  title,
+  desc,
+  emoji = '🐰',
+  dark = false,
+  status = 'EXECUTANDO',
+  chapter = state.chapter,
+  objects = []
+}) {
+  $('title').textContent = title;
+  $('description').textContent = desc;
+  $('bunny').textContent = emoji;
+
+  $('scene').classList.toggle('dark', dark);
+  $('scene').classList.remove('corrupt');
+
+  $('status').textContent = status;
+  $('chapterLabel').textContent = `CAPÍTULO ${chapter}`;
+  $('progress').textContent = `CAPÍTULO ${chapter} / 6`;
+
+  $('actions').replaceChildren();
+  $('roomObjects').replaceChildren();
+
+  objects.forEach(object => {
+    const button = document.createElement('button');
+    button.textContent = object.label;
+    button.onclick = object.action;
+    $('roomObjects').append(button);
+  });
+}
+
+function action(text, callback) {
+  const button = document.createElement('button');
+  button.textContent = text;
+  button.onclick = callback;
+
+  $('actions').append(button);
+  return button;
+}
+
+function showGame() {
+  state.opened = true;
+
+  $('gameWindow').classList.remove('hidden');
+
+  $('gameWindow').scrollIntoView({
+    behavior: 'smooth',
+    block: 'nearest'
+  });
+}
+
+// EFEITOS SONOROS
+
+function sound(freq = 100, duration = .35, kind = 'sawtooth', volume = .13) {
+  try {
+    audioContext = audioContext ||
+      new (window.AudioContext || window.webkitAudioContext)();
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = kind;
+    oscillator.frequency.value = freq;
+
+    gain.gain.setValueAtTime(volume, audioContext.currentTime);
+
+    gain.gain.exponentialRampToValueAtTime(
+      .001,
+      audioContext.currentTime + duration
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch (error) {}
+}
+
+// JUMPSCARES
+
+async function scare(
+  text = 'VOCÊ NÃO ESTÁ SOZINHO.',
+  face = '◉',
+  duration = 950,
+  kind = 0
+) {
+  scareCount++;
+
+  $('scareFace').textContent = face;
+  $('scareText').textContent = text;
+
+  $('jumpscare').classList.remove('hidden');
+  $('jumpscare').setAttribute('aria-hidden', 'false');
+  $('jumpscare').classList.add('show');
+
+  document.body.classList.add('shake');
+
+  if (kind === 0) {
+    sound(48, .55, 'sawtooth', .2);
+    setTimeout(() => sound(83, .3, 'square', .15), 80);
+  } else if (kind === 1) {
+    sound(880, .12, 'square', .1);
+    setTimeout(() => sound(55, .6, 'sawtooth', .2), 120);
+  } else {
+    sound(190, .3, 'triangle', .14);
+  }
+
+  await sleep(duration);
+
+  $('jumpscare').classList.remove('show');
+  $('jumpscare').classList.add('hidden');
+  $('jumpscare').setAttribute('aria-hidden', 'true');
+
+  document.body.classList.remove('shake');
+}
+
+// CAPÍTULO 1 — A SOLICITAÇÃO
+
+async function startChat() {
+  system('Nova conversa recebida. Perfil sem foto.');
+
+  await stranger('oi', 1100);
+  await stranger('tá ocupado?', 1700);
+
+  options([
+    {
+      text: 'Quem é você?',
+      key: 'identity',
+      action: async () => {
+        state.suspicion++;
+
+        await stranger('puts, foi mal KKKKK', 800);
+        await stranger('me chama de unknown mesmo', 1000);
+        await stranger('é meu nick. não é muito criativo eu sei', 900);
+        await stranger('e vc? posso te chamar de quê?', 900);
+
+        askNameThen('identity');
+      }
+    },
+    {
+      text: 'De onde você me conhece?',
+      key: 'source',
+      action: async () => {
+        state.suspicion += 2;
+
+        await stranger('essa é uma pergunta meio difícil de responder', 1000);
+        await stranger('achei seu perfil num lugar. acho', 1200);
+        await stranger('pera, isso ficou muito suspeito KKKK', 900);
+
+        options([
+          {
+            text: '“Acho”??',
+            action: async () => {
+              state.suspicion++;
+
+              await stranger('eu tava procurando um jogo antigo e tinha um comentário seu', 1000);
+              await stranger('pelo menos... eu acho que era seu', 1200);
+
+              askNameThen('source');
+            }
+          },
+          {
+            text: 'O que você quer?',
+            action: async () => {
+              await stranger('só preciso de alguém pra testar uma coisa', 1000);
+              await stranger('mas antes, qual seu nome? pode inventar um', 900);
+
+              askNameThen('source');
+            }
+          }
+        ]);
+      }
+    },
+    {
+      text: 'O que você quer?',
+      key: 'want',
+      action: async () => {
+        await stranger('honestamente? ajuda', 900);
+        await stranger('achei um jogo antigo e ele não abre direito pra mim', 1000);
+        await stranger('queria saber se é só no meu pc', 900);
+
+        askNameThen('want');
+      }
+    },
+    {
+      text: 'Oi? KKKKK',
+      key: 'casual',
+      action: async () => {
+        state.trust++;
+
+        await stranger('KKKKKK oi, desculpa chegar do nada', 900);
+        await stranger('eu sou péssimo começando conversa', 900);
+        await stranger('vc joga alguma coisa no pc?', 1000);
+
+        options([
+          {
+            text: 'Às vezes. Que jogo?',
+            action: async () => {
+              state.curiosity++;
+
+              await stranger('HAPPY PLACE. nome meio bobo, eu sei', 1000);
+              await stranger('parece um jogo de 1998', 900);
+
+              askNameThen('casual');
+            }
+          },
+          {
+            text: 'Não muito. Quem é você?',
+            action: async () => {
+              state.suspicion++;
+
+              await stranger('unknown_404. prazer, eu acho', 1000);
+              await stranger('posso te perguntar uma coisa?', 900);
+
+              askNameThen('casual');
+            }
+          }
+        ]);
+      }
+    }
+  ]);
+}
+
+async function askNameThen(route) {
+  await stranger(
+    'ah, não precisa falar seu nome real não. pode inventar um',
+    850
+  );
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-choices';
+
+  const input = document.createElement('input');
+  input.placeholder = 'Nome fictício (ou apelido)';
+  input.maxLength = 18;
+  input.className = 'choice';
+  input.style.width = '100%';
+
+  const button = document.createElement('button');
+  button.className = 'choice';
+  button.textContent = 'Continuar';
+
+  button.onclick = async () => {
+    if (busy) return;
+
+    busy = true;
+
+    state.playerName = (input.value.trim() || 'Jogador').slice(0, 18);
+
+    wrap.remove();
+
+    await player(state.playerName);
+
+    await stranger(
+      `beleza, ${state.playerName}. não vou esquecer`,
+      950
+    );
+
+    if (route === 'source') {
+      await stranger(
+        'enfim. o jogo que eu achei tem uma parte que não consigo passar',
+        1000
+      );
+    } else if (route === 'want') {
+      await stranger(
+        'não tem vírus nem nada, pelo menos não deveria KKKK',
+        1100
+      );
+    } else {
+      await stranger('vc parece de boa. vou te explicar', 850);
+    }
+
+    await stranger('posso te mandar o link?', 1000);
+
+    offerLink();
+
+    busy = false;
+  };
+
+  wrap.append(input, button);
+  $('chat').append(wrap);
+  input.focus();
+}
+
+// ESCOLHA SOBRE O LINK
+
+function offerLink() {
+  options([
+    {
+      text: 'Pode mandar. Quero ver.',
+      key: 'linkyes',
+      action: async () => {
+        state.curiosity += 2;
+        state.linkRefused = false;
+
+        await stranger('aí sim!!', 700);
+        await stranger('HAPPY_PLACE.exe', 900);
+
+        await stranger(
+          'não julga os gráficos, tá? foi feito em 1998 ou algo assim',
+          1000
+        );
+
+        await stranger('me avisa quando abrir', 950);
+
+        linkButton();
+      }
+    },
+    {
+      text: 'Depende. O que tem nele?',
+      key: 'linkquestion',
+      action: async () => {
+        state.suspicion++;
+
+        await stranger('um coelho, flores, essas coisas', 900);
+
+        await stranger(
+          'mas tem um corredor que eu não lembro de ter colocado',
+          1100
+        );
+
+        options([
+          {
+            text: 'Isso não parece seguro.',
+            action: async () => {
+              state.suspicion++;
+              state.linkRefused = true;
+
+              await stranger('é, talvez não seja mesmo', 900);
+              await stranger('...vou deixar quieto então', 1100);
+
+              laterLink();
+            }
+          },
+          {
+            text: 'Agora fiquei curioso.',
+            action: async () => {
+              state.curiosity += 2;
+
+              await stranger('sabia que ia funcionar KKKK', 850);
+
+              linkButton();
+            }
+          }
+        ]);
+      }
+    },
+    {
+      text: 'Não vou abrir um arquivo de desconhecido.',
+      key: 'linkno',
+      action: async () => {
+        state.suspicion += 2;
+        state.linkRefused = true;
+
+        await stranger('justo. de verdade, não vou insistir', 1000);
+        await stranger('só achei que alguém precisava ver o que tem lá', 1200);
+        await stranger('se mudar de ideia, me fala', 900);
+
+        laterLink();
+      }
+    }
+  ]);
+}
+
+async function laterLink() {
+  await sleep(900);
+
+  options([
+    {
+      text: 'Por que você parece tão preocupado com esse jogo?',
+      action: async () => {
+        state.curiosity++;
+
+        await stranger('porque ontem tinha uma mensagem dentro dele', 1100);
+
+        await stranger(
+          'com uma frase que eu tinha escrito no chat. antes de escrever',
+          1300
+        );
+
+        await stranger('não faz sentido. esquece', 900);
+
+        offerLinkAgain();
+      }
+    },
+    {
+      text: 'Tá. Vou nessa.',
+      action: async () => {
+        await stranger('beleza. boa noite, então', 900);
+
+        setPresence('offline há 2 minutos', true);
+
+        await sleep(1200);
+
+        setPresence('online agora');
+
+        await stranger('ei. desculpa. última coisa', 1100);
+        await stranger('o link ainda tá aqui se vc quiser', 1000);
+
+        offerLinkAgain();
+      }
+    }
+  ]);
+}
+
+async function offerLinkAgain() {
+  options([
+    {
+      text: 'Tá bom. Manda o link.',
+      action: async () => {
+        state.curiosity++;
+        linkButton();
+      }
+    },
+    {
+      text: 'Ainda não.',
+      action: async () => {
+        await stranger('tá. não abre se não quiser', 900);
+        await stranger('...ela acabou de aparecer de novo', 1200, true);
+        await stranger('desculpa. esquece isso', 1000);
+
+        options([
+          {
+            text: '“Ela” quem?',
+            action: async () => {
+              state.curiosity++;
+
+              await stranger('não sei explicar por mensagem', 900);
+
+              linkButton();
+            }
+          },
+          {
+            text: 'Encerrar conversa',
+            action: async () => {
+              await stranger('ok', 700);
+              await stranger('...não fecha a janela', 1300, true);
+
+              options([
+                {
+                  text: 'Por quê?',
+                  action: async () => {
+                    state.curiosity++;
+                    linkButton();
+                  }
+                },
+                {
+                  text: 'Fechar mesmo assim',
+                  action: async () => {
+                    await stranger('...', 1500);
+                    await stranger('a gente se fala de novo', 1000);
+
+                    linkButton();
+                  }
+                }
+              ]);
+            }
+          }
+        ]);
+      }
+    }
+  ]);
+}
+
+function linkButton() {
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-choices';
+
+  const button = document.createElement('button');
+  button.className = 'choice';
+  button.textContent = '🔗 ABRIR HAPPY_PLACE.exe';
+
+  button.onclick = async () => {
+    if (busy) return;
+
+    busy = true;
+    button.disabled = true;
+
+    await player('Abri o HAPPY_PLACE.exe.');
+
+    await stranger('hehe', 700);
+    await stranger('pera...', 1100);
+    await stranger('vc já tá vendo o coelho?', 1000);
+
+    showGame();
+    startGame();
+
+    busy = false;
+  };
+
+  wrap.append(button);
+  $('chat').append(wrap);
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+
+// CAPÍTULO 2 — HAPPY PLACE
+
+function startGame() {
+  state.chapter = 1;
+
+  gameScene({
+    title: 'BEM-VINDO AO HAPPY PLACE!',
+    desc: 'Escolha um caminho. O sol está brilhando e tudo parece normal. Por enquanto.',
+    emoji: '🐰',
+    chapter: 1,
+    status: 'EXECUTANDO'
+  });
+
+  action('🌷 Jardim', () => {
+    state.curiosity++;
+
+    gameScene({
+      title: 'O JARDIM',
+      desc: 'Uma flor balança mesmo sem vento. No centro dela há um pequeno olho desenhado.',
+      emoji: '🌼',
+      chapter: 1,
+      objects: [
+        {
+          label: 'Examinar a flor',
+          action: () => {
+            addClue('flor');
+
+            gameScene({
+              title: 'A FLOR',
+              desc: 'No caule, escrito em pixels minúsculos: “NÃO ERA PRA ELA ACORDAR”.',
+              emoji: '🌼',
+              chapter: 1
+            });
+
+            action('Voltar', startGame);
+          }
+        },
+        {
+          label: 'Olhar a cerca',
+          action: () => {
+            gameScene({
+              title: 'A CERCA',
+              desc: 'Do outro lado da cerca, uma silhueta está parada. Quando você pisca, não há nada.',
+              emoji: '🌳',
+              chapter: 1
+            });
+
+            action('Voltar', startGame);
+          }
+        }
+      ]
+    });
+
+    action('Pegar a flor', () => {
+      state.curiosity++;
+      corridor();
+    });
+
+    action('Voltar para o início', startGame);
+  });
+
+  action('🍄 Floresta', () => {
+    gameScene({
+      title: 'A FLORESTA',
+      desc: 'Os pássaros param de cantar. Entre as árvores há uma placa: “VOCÊ JÁ ESTEVE AQUI”.',
+      emoji: '🍄',
+      chapter: 1,
+      objects: [
+        {
+          label: 'Ler o verso da placa',
+          action: () => {
+            addClue('sign');
+
+            gameScene({
+              title: 'NO VERSO',
+              desc: 'Alguém gravou: “TESTE 07 — O JOGADOR SEMPRE ESCOLHE A FLORESTA”. Você não escolheu isso antes.',
+              emoji: '🪧',
+              dark: true,
+              chapter: 1
+            });
+
+            action('Voltar', startGame);
+          }
+        }
+      ]
+    });
+
+    action('Continuar pela trilha', corridor);
+    action('Voltar', startGame);
+  });
+
+  action('Sair do jogo', async () => {
+    await stranger('já? vc acabou de abrir', 800);
+
+    options([
+      {
+        text: 'Tem algo errado nesse jogo.',
+        action: async () => {
+          state.suspicion++;
+
+          await stranger('...sim', 1000);
+          await stranger('mas não fecha ainda', 1100);
+
+          corridor();
+        }
+      },
+      {
+        text: 'Quero sair mesmo assim.',
+        action: async () => {
+          state.obeyed++;
+
+          await stranger('ok. tenta fechar', 800);
+
+          endGame('escape');
+        }
+      }
+    ]);
+  });
+}
+
+// SISTEMA DE PISTAS
+
+function addClue(id) {
+  if (!state.clues.includes(id)) {
+    state.clues.push(id);
+    system('Pista registrada: ' + id.toUpperCase());
+  }
+}
+
+// CAPÍTULO 3 — O CORREDOR
+
+async function corridor() {
+  state.chapter = 2;
+  state.seenCorridor = true;
+
+  gameScene({
+    title: 'VOCÊ ESTÁ SOZINHO?',
+    desc: 'O corredor se estende além da tela. Três batidas vêm de algum lugar atrás de você.',
+    emoji: '🐰',
+    dark: true,
+    chapter: 2,
+    status: 'ARQUIVO DESCONHECIDO',
+    objects: [
+      {
+        label: 'Examinar a parede',
+        action: () => {
+          addClue('wall');
+
+          gameScene({
+            title: 'NA PAREDE',
+            desc: 'Riscos na tinta formam seis palavras: “ELE USA O CHAT PARA ENTRAR”.',
+            emoji: '▥',
+            dark: true,
+            chapter: 2
+          });
+
+          action('Voltar ao corredor', corridor);
+        }
+      }
+    ]
+  });
+
+  sound(180, .15);
+  setTimeout(() => sound(180, .15), 320);
+  setTimeout(() => sound(180, .15), 640);
+
+  await stranger('vc chegou no corredor?', 900);
+  await stranger('...', 1200);
+  await stranger('NÃO OLHA PRA TRÁS.', 600, true);
+
+  options([
+    {
+      text: 'Como você sabe o que eu estou vendo?',
+      action: async () => {
+        state.suspicion += 2;
+
+        await stranger('eu não sei', 650);
+        await stranger('quer dizer— eu joguei essa parte ontem', 1000);
+        await stranger('o corredor não era assim ontem', 1200, true);
+
+        afterCorridor();
+      }
+    },
+    {
+      text: 'Que jogo é esse de verdade?',
+      action: async () => {
+        state.curiosity += 2;
+
+        await stranger('eu achei que era só um jogo', 900);
+        await stranger('tem um arquivo chamado TEST_07 que não fui eu que criei', 1100);
+
+        afterCorridor();
+      }
+    },
+    {
+      text: 'Tem alguém dentro desse jogo?',
+      action: async () => {
+        state.curiosity++;
+
+        await stranger('não responde isso em voz alta', 900);
+        await stranger('desculpa. isso nem faz sentido', 1000);
+
+        afterCorridor();
+      }
+    },
+    {
+      text: 'Vou fechar isso agora.',
+      action: async () => {
+        state.obeyed++;
+
+        await stranger('sim. fecha. agora', 600);
+        await stranger('NÃO, ESPERA—', 850, true);
+
+        options([
+          {
+            text: 'Fechar o jogo',
+            action: async () => {
+              await scare('NÃO FECHE A JANELA', '◉', 850, 1);
+              await stranger('vc viu isso?', 700);
+
+              chapter3();
+            }
+          },
+          {
+            text: 'Continuar',
+            action: async () => {
+              state.curiosity++;
+
+              await stranger('...tá', 700);
+
+              afterCorridor();
+            }
+          }
+        ]);
+      }
+    }
+  ]);
+}
+
+function afterCorridor() {
+  gameScene({
+    title: 'A FIGURA',
+    desc: 'No fim do corredor há alguém imóvel. As luzes piscam. A figura desaparece.',
+    emoji: '▧',
+    dark: true,
+    chapter: 2,
+    status: 'SINAL PERDIDO'
+  });
+
+  setTimeout(() => {
+    if (!state.ending) {
+      $('scene').classList.add('corrupt');
+      sound(90, .22, 'square');
+    }
+  }, 300);
+
+  action('Ir até onde ela estava', async () => {
+    state.curiosity++;
+
+    await scare('VOCÊ DEMOROU.', '♟', 700, 0);
+
+    addClue('figure');
+
+    await stranger('vc viu a pessoa no fim do corredor?', 700);
+    await stranger('eu não falei nada sobre uma pessoa', 1000, true);
+
+    chapter3();
+  });
+
+  action('Voltar', async () => {
+    state.suspicion++;
+
+    await stranger('não volta por aí', 900);
+
+    chapter3();
+  });
+}
+
+// CAPÍTULO 4 — NÃO OLHE PARA TRÁS
+
+async function chapter3() {
+  state.chapter = 3;
+
+  gameScene({
+    title: 'NÃO OLHE PARA TRÁS',
+    desc: 'Uma porta cinza aparece no fim do corredor. Há três batidas do outro lado.',
+    emoji: '🚪',
+    dark: true,
+    chapter: 3,
+    status: 'INSTRUÇÃO RECEBIDA',
+    objects: [
+      {
+        label: 'Examinar a maçaneta',
+        action: () => {
+          addClue('handle');
+
+          gameScene({
+            title: 'A MAÇANETA',
+            desc: 'Está morna. Do outro lado, alguém sussurra seu apelido: ' + state.playerName + '.',
+            emoji: '🚪',
+            dark: true,
+            chapter: 3
+          });
+
+          action('Recuar', chapter3);
+        }
+      }
+    ]
+  });
+
+  await stranger('escuta. eu lembro dessa parte', 800);
+  await stranger('não abre a porta quando ouvir as batidas', 1000);
+  await stranger('e, por favor, não olha pra trás', 1000);
+
+  options([
+    {
+      text: 'Obedecer e ficar parado',
+      action: async () => {
+        state.obeyed++;
+
+        await stranger('boa. só espera a luz voltar', 900);
+        await sleep(700);
+
+        gameScene({
+          title: 'A LUZ VOLTOU',
+          desc: 'A porta está aberta. Você não viu ninguém abrir.',
+          emoji: '🚪',
+          dark: true,
+          chapter: 3
+        });
+
+        action('Entrar na porta', roomChapter);
+
+        action('Voltar pelo corredor', async () => {
+          await scare('VOCÊ OLHOU.', '◉', 950, 1);
+          roomChapter();
+        });
+      }
+    },
+    {
+      text: 'Abrir a porta',
+      action: async () => {
+        state.curiosity += 2;
+
+        await stranger('NÃO—', 500, true);
+        await scare('EU DISSE PRA NÃO ABRIR', '◉', 1100, 0);
+
+        gameScene({
+          title: 'TELA CORROMPIDA',
+          desc: 'Por um instante, a tela fica preta. Letras aparecem: “ELE NÃO É O PRIMEIRO A RESPONDER”.',
+          emoji: '',
+          dark: true,
+          chapter: 3,
+          status: 'ERRO 0x000404'
+        });
+
+        addClue('door');
+
+        action('Continuar', roomChapter);
+      }
+    },
+    {
+      text: 'Olhar para trás',
+      action: async () => {
+        state.suspicion++;
+
+        await scare('VOCÊ NÃO DEVIA TER OLHADO', '♟', 1150, 1);
+
+        gameScene({
+          title: 'NÃO HÁ NINGUÉM',
+          desc: 'O corredor está vazio. No chat, há uma mensagem nova que você não viu chegar.',
+          emoji: '',
+          dark: true,
+          chapter: 3
+        });
+
+        await stranger('eu não mandei isso', 900, true);
+
+        roomChapter();
+      }
+    }
+  ]);
+}
+
+// CAPÍTULO 5 — A SALA E OS ARQUIVOS
+
+async function roomChapter() {
+  state.chapter = 4;
+
+  gameScene({
+    title: 'A SALA',
+    desc: 'Uma sala abandonada. Um computador antigo está ligado, embora não haja cabos conectados.',
+    emoji: '🖥️',
+    dark: true,
+    chapter: 4,
+    status: 'EXPLORAÇÃO',
+    objects: [
+      {
+        label: '📄 arquivo_01.txt',
+        action: () => openFile('file1')
+      },
+      {
+        label: '📄 readme_old.txt',
+        action: () => openFile('file2')
+      },
+      {
+        label: '📄 test_07.log',
+        action: () => openFile('file3')
+      },
+      {
+        label: '🖥️ Examinar monitor',
+        action: async () => {
+          addClue('monitor');
+
+          gameScene({
+            title: 'O MONITOR',
+            desc: 'A tela reflete a sala. No reflexo, há alguém atrás de você. Quando vira, não há ninguém.',
+            emoji: '🖥️',
+            dark: true,
+            chapter: 4
+          });
+
+          await scare('', '♟', 550, 2);
+
+          action('Voltar', roomChapter);
+        }
+      }
+    ]
+  });
+
+  action('Voltar ao chat', async () => {
+    await stranger('vc chegou na sala?', 800);
+    await stranger('não responde. eu sei que chegou', 1000, true);
+
+    chapter4Chat();
+  });
+
+  action('Procurar uma saída', async () => {
+    state.curiosity++;
+
+    await stranger('não tem saída nessa parte', 850);
+
+    roomChapter();
+  });
+}
+
+function openFile(id) {
+  state.filesOpened++;
+
+  const data = {
+    file1: [
+      'arquivo_01.txt',
+      'REGISTRO DE TESTE 07\n' +
+      'O voluntário respondeu ao chat antes de receber a primeira mensagem.\n' +
+      'Observação: o nome usado no jogo não corresponde ao nome registrado no teste.'
+    ],
+    file2: [
+      'readme_old.txt',
+      'HAPPY PLACE — versão local\n' +
+      'Criador: [DADO CORROMPIDO]\n' +
+      'Última alteração: amanhã, 03:17\n' +
+      'Nota: NÃO INCLUIR MÓDULO DE CHAT.'
+    ],
+    file3: [
+      'test_07.log',
+      'CONEXÃO: unknown_404\n' +
+      'ORIGEM: desconhecida\n' +
+      'MENSAGEM RECEBIDA ANTES DO ENVIO: “eu estou aqui”\n' +
+      'STATUS DO TESTE: NÃO ENCERRADO'
+    ]
+  }[id];
+
+  addClue(id);
+
+  gameScene({
+    title: data[0],
+    desc: data[1],
+    emoji: '📄',
+    dark: true,
+    chapter: 4,
+    status: 'ARQUIVO ABERTO'
+  });
+
+  action('Fechar arquivo', roomChapter);
+
+  if (state.filesOpened >= 2 && !state.secretSignal) {
+    state.secretSignal = true;
+
+    setTimeout(() => {
+      if (!state.ending) {
+        stranger('vc abriu dois arquivos?', 600)
+          .then(() => stranger('não abre o terceiro', 900, true));
+      }
+    }, 300);
+  }
+}
+
+// CAPÍTULO 6 — A CONFIANÇA
+
+async function chapter4Chat() {
+  await stranger('eu preciso que vc acredite em mim por um segundo', 900);
+  await stranger('as mensagens que eu mandei depois do corredor...', 1100);
+  await stranger('não fui eu que escrevi', 1000, true);
+
+  options([
+    {
+      text: 'Eu acredito em você.',
+      action: async () => {
+        state.trust += 2;
+
+        await stranger('obrigado. sério', 800);
+        await stranger('então me ajuda a entender o que é o arquivo TEST_07', 1000);
+
+        roomChapter();
+      }
+    },
+    {
+      text: 'Você está mentindo.',
+      action: async () => {
+        state.suspicion += 2;
+
+        await stranger('eu sabia que vc ia pensar isso', 900);
+
+        await stranger(
+          'olha o horário das mensagens. algumas chegaram quando eu tava offline',
+          1000
+        );
+
+        setPresence('offline', true);
+
+        await sleep(900);
+
+        setPresence('online agora');
+
+        await stranger('viu? eu não tava aqui', 900);
+
+        roomChapter();
+      }
+    },
+    {
+      text: 'Não sei no que acreditar.',
+      action: async () => {
+        state.curiosity++;
+
+        await stranger('justo. então olha os arquivos', 900);
+        await stranger('mas não abre o terceiro. por favor', 1000);
+
+        roomChapter();
+      }
+    }
+  ]);
+}
+
+// CAPÍTULO FINAL
+
+async function finalChapter() {
+  state.chapter = 5;
+
+  gameScene({
+    title: 'A ÚLTIMA MENSAGEM',
+    desc: 'O computador antigo mostra uma janela de chat. Uma nova mensagem aparece com o seu nome.',
+    emoji: '▣',
+    dark: true,
+    chapter: 5,
+    status: 'CONEXÃO DUPLICADA'
+  });
+
+  await stranger('não abre mais o jogo', 850);
+  await stranger('tô falando sério. fecha tudo', 1000);
+
+  await sleep(700);
+
+  say(state.playerName || 'Você', 'eu estou aqui', 'glitch');
+
+  await stranger('...essa mensagem apareceu pra mim também', 1000, true);
+  await stranger('eu não mandei o link pra isso acontecer', 900);
+
+  options([
+    {
+      text: 'Confiar nele e encerrar o jogo',
+      action: async () => {
+        state.trust++;
+        state.obeyed++;
+
+        endGame('escape');
+      }
+    },
+    {
+      text: 'Investigar o sinal até o fim',
+      action: async () => {
+        state.curiosity += 2;
+
+        await stranger('tem uma sequência no log', 800);
+        await stranger('07 / 07 / 07', 900, true);
+
+        finalDecision();
+      }
+    },
+    {
+      text: 'Perguntar quem ele é de verdade',
+      action: async () => {
+        state.suspicion++;
+
+        await stranger('eu já te falei', 700);
+        await stranger('acho que te falei', 900);
+        await stranger('não lembro mais qual versão de mim falou com vc', 1100, true);
+
+        finalDecision();
+      }
+    }
+  ]);
+}
+
+function finalDecision() {
+  options([
+    {
+      text: 'Abrir o último registro',
+      action: async () => {
+        if (state.clues.length >= 3 && state.filesOpened >= 3) {
+          endGame('secret');
+        } else {
+          await stranger('o arquivo não abre. faltam partes', 900);
+          endGame('truth');
+        }
+      }
+    },
+    {
+      text: 'Não arriscar. Fechar tudo.',
+      action: async () => {
+        endGame('escape');
+      }
+    }
+  ]);
+}
+
+// SISTEMA DE FINAIS
+
+async function endGame(kind) {
+  if (state.ending) return;
+
+  state.ending = true;
+
+  $('gameWindow').classList.add('hidden');
+
+  let title = '';
+  let msg = '';
+  let detail = '';
+
+  if (kind === 'secret' && state.clues.length >= 3 && state.filesOpened >= 3) {
+    title = 'TESTE 07';
+
+    msg = 'O último arquivo contém uma gravação sem áudio. A transcrição termina com: “unknown_404 não era o operador. Era o primeiro jogador que respondeu.”';
+
+    detail = 'FINAL SECRETO — Você reuniu pistas suficientes, mas o registro não explica quem enviou a primeira mensagem.';
+  } else if (kind === 'escape') {
+    title = 'CONEXÃO ENCERRADA';
+
+    msg = 'Você fecha HAPPY PLACE. O chat fica quieto. Por alguns segundos, parece que acabou.';
+
+    detail = 'FINAL: SAÍDA — Nem todas as perguntas foram respondidas. O arquivo continua no computador fictício.';
+  } else if (state.trust >= 2 && state.suspicion < 3) {
+    title = 'VOCÊ CONFIOU';
+
+    msg = 'unknown_404 agradece. A conversa some, linha por linha. A última coisa que resta é o link, agora sem nome.';
+
+    detail = 'FINAL: CONFIANÇA — Você escolheu acreditar nele. Talvez tenha ajudado. Talvez tenha aberto a porta.';
+  } else {
+    title = 'UMA PARTE DA VERDADE';
+
+    msg = 'O registro sugere que o jogo repete conversas antigas e usa respostas para prever o próximo passo. Mas alguém escreveu o primeiro diálogo antes de existir um jogador.';
+
+    detail = 'FINAL: ARQUIVO INCOMPLETO — Você descobriu o mecanismo, não quem o colocou ali.';
+  }
+
+  if (kind === 'escape' && state.trust >= 2 && state.curiosity < 3) {
+    title = 'VOCÊ SAIU CEDO';
+
+    detail = 'FINAL: FUGA — Você não descobriu o que havia no arquivo. Talvez essa tenha sido a melhor escolha.';
+  }
+
+  if (state.suspicion >= 4 && kind !== 'secret') {
+    detail += ' Você nunca confiou completamente em unknown_404.';
+  }
+
+  $('endingTitle').textContent = title;
+  $('endingMessage').textContent = msg;
+  $('endingDetail').textContent = detail;
+
+  $('ending').classList.remove('hidden');
+
+  await scare(
+    kind === 'secret' ? 'VOCÊ AINDA ESTÁ AQUI' : 'FIM DA CONEXÃO',
+    kind === 'secret' ? '◉' : '☻',
+    kind === 'secret' ? 1300 : 650,
+    kind === 'secret' ? 1 : 2
+  );
+}
+
+// CAMPO DE MENSAGEM
+
+$('chatForm').addEventListener('submit', event => {
+  event.preventDefault();
+
+  const input = $('message');
+  const text = input.value.trim();
+
+  if (!text || busy || state.ending) return;
+
+  input.value = '';
+
+  say(state.playerName || 'Você', text, 'player');
+
+  busy = true;
+
+  setTimeout(async () => {
+    if (!state.opened) {
+      await stranger(
+        'kkkk escolhe uma das respostas ali em cima primeiro',
+        500
+      );
+    } else if (state.chapter < 4) {
+      await stranger(
+        'eu não sei como responder isso por aqui. escolhe uma das opções, por favor',
+        650
+      );
+    } else {
+      await stranger('não escreve isso no chat', 600, true);
+      await stranger('as opções são mais seguras. eu acho', 900);
+    }
+
+    busy = false;
+  }, 650);
+});
+
+// CONTROLES DA INTERFACE
+
+$('minimizeChat').onclick = () => {
+  $('chatWindow').classList.toggle('minimized');
+};
+
+$('hideGame').onclick = () => {
+  $('gameWindow').classList.add('hidden');
+};
+
+$('restart').onclick = () => location.reload();
+
+// RELÓGIO
+
+setInterval(() => {
+  $('clock').textContent = new Date().toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}, 1000);
+
+// PROGRESSÃO PARA O CAPÍTULO FINAL
+
+const oldRoomChapter = roomChapter;
+
+roomChapter = function() {
+  oldRoomChapter();
+
+  action('Continuar para o próximo capítulo', async () => {
+    await stranger('tem uma coisa que eu não te contei', 850);
+    await stranger('o arquivo test_07 tem uma mensagem sua', 1000);
+    await stranger('mas vc nunca jogou isso antes. né?', 1100, true);
+
+    finalChapter();
+  });
+};
+
+// INICIAR
+
+startChat();
