@@ -15,6 +15,12 @@
   box-sizing: border-box;
 }
 
+/* CORREÇÃO: elementos ocultos continuam ocultos */
+[hidden],
+.hidden {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: radial-gradient(ellipse at top, #182024 0, #080a0c 65%);
@@ -48,6 +54,7 @@ body {
 .led {
   width: 7px;
   height: 7px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: #68ff91;
   box-shadow: 0 0 8px #68ff91;
@@ -68,7 +75,7 @@ body {
   margin: 24px auto;
   padding: 0 16px;
   display: grid;
-  grid-template-columns: minmax(320px, .92fr) minmax(320px, 1.08fr);
+  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
   gap: 18px;
   align-items: start;
 }
@@ -81,12 +88,13 @@ body {
 }
 
 .window-title {
-  height: 36px;
+  min-height: 36px;
   background: linear-gradient(90deg, #1c2a2c, #101719);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 0 10px;
   color: #d2e8da;
   font-size: 12px;
@@ -114,6 +122,7 @@ body {
   place-items: center;
   width: 36px;
   height: 36px;
+  flex-shrink: 0;
   background: #1e2c30;
   border: 1px solid #526468;
   color: var(--green);
@@ -218,10 +227,6 @@ button:disabled {
   background: #0b1012;
 }
 
-.hidden {
-  display: none !important;
-}
-
 .dots {
   animation: blink 1s steps(2, start) infinite;
 }
@@ -275,6 +280,7 @@ button:disabled {
 .game-footer {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   color: #6f9585;
   font-size: 10px;
@@ -326,6 +332,7 @@ button:disabled {
   justify-content: center;
   gap: 8px;
   margin-top: 12px;
+  position: relative;
   z-index: 2;
 }
 
@@ -348,6 +355,7 @@ button:disabled {
   gap: 7px;
   flex-wrap: wrap;
   justify-content: center;
+  position: relative;
   z-index: 2;
 }
 
@@ -404,6 +412,7 @@ button:disabled {
   padding: 10px 1px 0;
 }
 
+/* A tela final só aparece quando o JavaScript a torna visível */
 .ending {
   position: fixed;
   inset: 0;
@@ -591,5 +600,15 @@ button:disabled {
 
   .window-title {
     font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
