@@ -22,7 +22,7 @@
     <section class="chat-window window" id="chatWindow">
       <div class="window-title">
         <span>✉ Mensagens — unknown_404</span>
-        <button id="minimizeChat" aria-label="Minimizar chat">_</button>
+        <button id="minimizeChat" type="button" aria-label="Minimizar chat">_</button>
       </div>
 
       <div class="profile">
@@ -36,7 +36,7 @@
 
       <div id="chat" class="chat" aria-live="polite"></div>
 
-      <div id="typing" class="typing hidden">
+      <div id="typing" class="typing hidden" hidden>
         unknown_404 está digitando<span class="dots">...</span>
       </div>
 
@@ -56,10 +56,10 @@
       </p>
     </section>
 
-    <section class="game-window window" id="gameWindow">
+    <section class="game-window window hidden" id="gameWindow" hidden>
       <div class="window-title">
         <span id="gameWindowTitle">▣ HAPPY PLACE.exe</span>
-        <button id="hideGame" aria-label="Ocultar jogo">×</button>
+        <button id="hideGame" type="button" aria-label="Ocultar jogo">×</button>
       </div>
 
       <div class="game-inner">
@@ -85,17 +85,29 @@
     </section>
   </main>
 
-  <section id="ending" class="ending hidden" role="dialog" aria-modal="true">
+  <section
+    id="ending"
+    class="ending hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="endingTitle"
+    hidden
+  >
     <div class="ending-card">
       <p class="eyebrow">CONEXÃO ENCERRADA?</p>
       <h1 id="endingTitle">FIM</h1>
       <p id="endingMessage"></p>
       <p id="endingDetail" class="muted"></p>
-      <button id="restart">REINICIAR PARTIDA</button>
+      <button id="restart" type="button">REINICIAR PARTIDA</button>
     </div>
   </section>
 
-  <div id="jumpscare" class="jumpscare hidden" aria-hidden="true">
+  <div
+    id="jumpscare"
+    class="jumpscare hidden"
+    aria-hidden="true"
+    hidden
+  >
     <div id="scareFace" class="scare-face">◉</div>
     <div id="scareText" class="scare-text">NÃO OLHE.</div>
   </div>
@@ -103,3 +115,4 @@
   <script src="script.js"></script>
 </body>
 </html>
+
