@@ -1,0 +1,105 @@
+
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090b0d">
+  <title>DON'T OPEN THE LINK</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <span class="led"></span>
+    <span>LINKCHAT 98</span>
+    <span class="top-status" id="connection">CONECTADO</span>
+    <time id="clock">00:00</time>
+  </header>
+
+  <main class="layout">
+    <section class="chat-window window" id="chatWindow">
+      <div class="window-title">
+        <span>✉ Mensagens — unknown_404</span>
+        <button id="minimizeChat" aria-label="Minimizar chat">_</button>
+      </div>
+
+      <div class="profile">
+        <div class="avatar" id="avatar">?</div>
+        <div>
+          <strong>unknown_404</strong>
+          <div class="muted" id="presence">online agora</div>
+        </div>
+        <span class="encrypted">● conexão instável</span>
+      </div>
+
+      <div id="chat" class="chat" aria-live="polite"></div>
+
+      <div id="typing" class="typing hidden">
+        unknown_404 está digitando<span class="dots">...</span>
+      </div>
+
+      <form id="chatForm" class="composer">
+        <input
+          id="message"
+          maxlength="180"
+          autocomplete="off"
+          placeholder="Escreva uma mensagem..."
+          aria-label="Sua mensagem"
+        >
+        <button type="submit">ENVIAR ↵</button>
+      </form>
+
+      <p class="hint">
+        Ficção interativa • nenhuma informação real do computador é acessada
+      </p>
+    </section>
+
+    <section class="game-window window" id="gameWindow">
+      <div class="window-title">
+        <span id="gameWindowTitle">▣ HAPPY PLACE.exe</span>
+        <button id="hideGame" aria-label="Ocultar jogo">×</button>
+      </div>
+
+      <div class="game-inner">
+        <div class="game-status">
+          <span id="chapterLabel">ARQUIVO DE TESTE</span>
+          <span id="status">AGUARDANDO EXECUÇÃO</span>
+        </div>
+
+        <div id="scene" class="scene">
+          <div id="sceneNoise" class="scene-noise"></div>
+          <div id="bunny" class="bunny">🐰</div>
+          <h2 id="title">HAPPY PLACE</h2>
+          <p id="description">Um lugar feliz, feito só para você.</p>
+          <div id="roomObjects" class="room-objects"></div>
+          <div id="actions" class="actions"></div>
+        </div>
+
+        <div class="game-footer">
+          <span>HAPPY_PLACE.EXE</span>
+          <span id="progress">CAPÍTULO 0 / 6</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section id="ending" class="ending hidden" role="dialog" aria-modal="true">
+    <div class="ending-card">
+      <p class="eyebrow">CONEXÃO ENCERRADA?</p>
+      <h1 id="endingTitle">FIM</h1>
+      <p id="endingMessage"></p>
+      <p id="endingDetail" class="muted"></p>
+      <button id="restart">REINICIAR PARTIDA</button>
+    </div>
+  </section>
+
+  <div id="jumpscare" class="jumpscare hidden" aria-hidden="true">
+    <div id="scareFace" class="scare-face">◉</div>
+    <div id="scareText" class="scare-text">NÃO OLHE.</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
